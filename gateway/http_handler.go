@@ -6,15 +6,16 @@ import (
 
 	"github.com/wesleybruno/golang-grpc-micro-service/common"
 	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
+	"github.com/wesleybruno/golang-grpc-micro-service/gateway/gateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type handler struct {
-	client pb.OrderServiceClient
+	gateway gateway.OrdersGateway
 }
 
-func NewHandler(client pb.OrderServiceClient) *handler {
+func NewHandler(client gateway.OrdersGateway) *handler {
 	return &handler{client}
 }
 
@@ -39,7 +40,7 @@ func (h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	o, err := h.client.CreateOrder(r.Context(), &pb.CreateOrderRequest{
+	o, err := h.gateway.CreateOrder(r.Context(), &pb.CreateOrderRequest{
 		CustomerID: customerId,
 		Items:      items,
 	})

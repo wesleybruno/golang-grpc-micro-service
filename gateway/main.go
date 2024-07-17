@@ -1,41 +1,56 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 	common "github.com/wesleybruno/golang-grpc-micro-service/common"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/wesleybruno/golang-grpc-micro-service/gateway/gateway"
 
-	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
+	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery"
+	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery/consul"
 )
 
 var (
-	httpAddr         = common.EnvString("HTTP_ADDR", ":8080")
-	orderServiceAddr = "localhost:2000"
+	serviceName = "gateway"
+	httpAddr    = common.EnvString("HTTP_ADDR", ":8080")
+	consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
 )
 
 func main() {
-
-	conn, err := grpc.NewClient(orderServiceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	registry, err := consul.NewRegistry(consulAddr, serviceName)
 	if err != nil {
-		log.Fatalf("Error to start conn %s", err)
+		panic(err)
 	}
-	defer conn.Close()
 
-	log.Println("Dialing order service at ", orderServiceAddr)
-	c := pb.NewOrderServiceClient(conn)
+	ctx := context.Background()
+	instanceId := discovery.GenerateInstanceID(serviceName)
+	if err := registry.Register(ctx, instanceId, serviceName, httpAddr); err != nil {
+		panic(err)
+	}
+
+	go func() {
+		for {
+			if err := registry.HealthCheck(instanceId, serviceName); err != nil {
+				log.Fatalf("Error to sverify HealthCheck %s", err)
+			}
+			time.Sleep(time.Second * 1)
+		}
+	}()
+
+	defer registry.Deregister(ctx, instanceId, serviceName)
 
 	mux := http.NewServeMux()
-	handler := NewHandler(c)
+	gateway := gateway.NewGRPCGateway(registry)
+	handler := NewHandler(gateway)
 	handler.registerRoutes(mux)
 
 	log.Printf("Starting Server on PORT %s", httpAddr)
 
 	if err := http.ListenAndServe(httpAddr, mux); err != nil {
 		log.Fatalf("Error to start server %s", err)
-
 	}
 }
