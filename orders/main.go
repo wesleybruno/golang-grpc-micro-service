@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/wesleybruno/golang-grpc-micro-service/common"
+	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery/consul"
 	"google.golang.org/grpc"
@@ -18,6 +19,10 @@ var (
 	serviceName = "orders"
 	grpcAddress = common.EnvString("GRPC_ADDRESS", "localhost:2000")
 	consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
+	amqpUser    = common.EnvString("RABBITMQ_USER", "guest")
+	amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
+	amqpHost    = common.EnvString("RABBITMQ_HOST", "localhost")
+	amqpPort    = common.EnvString("RABBITMQ_PORT", "5672")
 )
 
 func main() {
@@ -36,13 +41,19 @@ func main() {
 	go func() {
 		for {
 			if err := registry.HealthCheck(instanceId, serviceName); err != nil {
-				log.Fatalf("Error to sverify HealthCheck %s", err)
+				log.Fatalf("Error to verify HealthCheck %s", err)
 			}
 			time.Sleep(time.Second * 1)
 		}
 	}()
 
 	defer registry.Deregister(ctx, instanceId, serviceName)
+
+	ch, close := broker.Connect(amqpUser, amqpPass, amqpHost, amqpPort)
+	defer func() {
+		close()
+		ch.Close()
+	}()
 
 	grpcServer := grpc.NewServer()
 	l, err := net.Listen("tcp", grpcAddress)
@@ -54,7 +65,7 @@ func main() {
 	store := NewOrderStore()
 	svc := NewOrderService(store)
 
-	NewGrRpcHandler(grpcServer, *svc)
+	NewGrRpcHandler(grpcServer, *svc, ch)
 	svc.CreateOrder(context.Background())
 	log.Println("New GRPC Server start at:", grpcAddress)
 

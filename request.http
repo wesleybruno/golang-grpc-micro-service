@@ -1,0 +1,13 @@
+POST http://localhost:3000/api/customers/10/orders HTTP/1.1
+content-type: application/json
+
+[
+    {
+        "ID": "1",
+        "Quantity": 3
+    },
+    {
+        "ID": "2",
+        "Quantity": 3
+    }
+]

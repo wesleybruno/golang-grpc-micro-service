@@ -4,10 +4,10 @@ go 1.22.2
 
 require (
 	github.com/hashicorp/consul/api v1.29.2
+	github.com/rabbitmq/amqp091-go v1.10.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
 )
-
 
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
