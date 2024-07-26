@@ -31,12 +31,9 @@ func NewGrRpcHandler(grpcServer *grpc.Server, service orderService, ch *amqp.Cha
 func (h gRpcHandler) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) (*pb.Order, error) {
 	log.Printf("New order received %v", p)
 
-	if err := h.service.ValidateOrder(ctx, p); err != nil {
+	o, err := h.service.CreateOrder(ctx, p)
+	if err != nil {
 		return nil, err
-	}
-
-	o := &pb.Order{
-		ID: "10",
 	}
 
 	marshelledOrder, err := json.Marshal(o)

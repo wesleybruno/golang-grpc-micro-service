@@ -6,13 +6,13 @@ import (
 	"net"
 	"time"
 
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/wesleybruno/golang-grpc-micro-service/common"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery/consul"
+	inmemProcessor "github.com/wesleybruno/golang-grpc-micro-service/payment/processor/inmem"
 	"google.golang.org/grpc"
-
-	_ "github.com/joho/godotenv/autoload"
 )
 
 var (
@@ -57,7 +57,8 @@ func main() {
 		ch.Close()
 	}()
 
-	svc := NewService()
+	immenProcessor := inmemProcessor.NewInmem()
+	svc := NewService(immenProcessor)
 
 	amqpConsumer := NewConsumer(svc)
 	go amqpConsumer.Listen(ch)
