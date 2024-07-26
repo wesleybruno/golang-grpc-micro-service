@@ -31,3 +31,17 @@ func (g *gateway) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) (*p
 	})
 
 }
+
+func (g *gateway) GetOrderById(ctx context.Context, customerId, orderId string) (*pb.Order, error) {
+	conn, err := discovery.ServiceConnection(ctx, "orders", g.registry)
+	if err != nil {
+		log.Fatalf("Error to start conn %s", err)
+	}
+
+	c := pb.NewOrderServiceClient(conn)
+
+	return c.GetOrder(ctx, &pb.GetOrderRequest{
+		CustomerID: customerId,
+		OrderID:    orderId,
+	})
+}

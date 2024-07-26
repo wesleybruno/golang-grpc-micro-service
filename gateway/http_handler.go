@@ -21,7 +21,10 @@ func NewHandler(client gateway.OrdersGateway) *handler {
 
 func (h *handler) registerRoutes(mux *http.ServeMux) {
 
+	mux.Handle("/", http.FileServer(http.Dir("public")))
+
 	mux.HandleFunc("POST /api/customers/{customerID}/orders", h.handleCreateOrder)
+	mux.HandleFunc("GET /api/customers/{customerID}/orders/{orderID}", h.handleGetOrder)
 
 }
 
@@ -64,6 +67,32 @@ func (h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	common.WriteJSON(w, http.StatusOK, o)
 
+}
+
+func (h *handler) handleGetOrder(w http.ResponseWriter, r *http.Request) {
+	customerId := r.PathValue("customerId")
+	orderId := r.PathValue("orderID")
+
+	o, err := h.gateway.GetOrderById(r.Context(), customerId, orderId)
+
+	rStatus := status.Convert(err)
+	if rStatus != nil {
+
+		if rStatus.Code() != codes.InvalidArgument {
+			common.WriteError(w, http.StatusBadRequest, rStatus.Message())
+			return
+		}
+
+		common.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err != nil {
+		common.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	common.WriteJSON(w, http.StatusOK, o)
 }
 
 func validateItems(items []*pb.ItemsWithQuantity) error {

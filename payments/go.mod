@@ -5,6 +5,7 @@ go 1.22.2
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.10.0
+	github.com/stripe/stripe-go/v78 v78.12.0
 	github.com/wesleybruno/golang-grpc-micro-service/common v0.0.0-20240718210450-e16ac70db052
 	google.golang.org/grpc v1.65.0
 )

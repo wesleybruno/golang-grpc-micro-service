@@ -16,18 +16,19 @@ func NewOrderService(store OrdersStore) *orderService {
 	return &orderService{store}
 }
 
-func (s *orderService) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) (*pb.Order, error) {
-
-	items, err := s.ValidateOrder(ctx, p)
+func (s *orderService) GetOrder(ctx context.Context, p *pb.GetOrderRequest) (*pb.Order, error) {
+	o, err := s.store.GetOrder(ctx, p.OrderID, p.CustomerID)
 	if err != nil {
 		return nil, err
 	}
+	return o, nil
+}
 
-	o := &pb.Order{
-		ID:         "10",
-		CustomerID: p.CustomerID,
-		Status:     "pending",
-		Items:      items,
+func (s *orderService) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest, i []*pb.Item) (*pb.Order, error) {
+
+	o, err := s.store.Create(ctx, p, i)
+	if err != nil {
+		return nil, err
 	}
 
 	return o, nil

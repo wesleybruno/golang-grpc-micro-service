@@ -65,7 +65,7 @@ func main() {
 	store := NewOrderStore()
 	svc := NewOrderService(store)
 
-	NewGrRpcHandler(grpcServer, *svc, ch)
+	NewGrRpcHandler(grpcServer, svc, ch)
 
 	log.Println("New GRPC Server start at:", grpcAddress)
 

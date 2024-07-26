@@ -13,11 +13,11 @@ import (
 
 type gRpcHandler struct {
 	pb.UnimplementedOrderServiceServer
-	service orderService
+	service OrdersService
 	ch      *amqp.Channel
 }
 
-func NewGrRpcHandler(grpcServer *grpc.Server, service orderService, ch *amqp.Channel) {
+func NewGrRpcHandler(grpcServer *grpc.Server, service OrdersService, ch *amqp.Channel) {
 
 	handler := &gRpcHandler{
 		service: service,
@@ -31,7 +31,12 @@ func NewGrRpcHandler(grpcServer *grpc.Server, service orderService, ch *amqp.Cha
 func (h gRpcHandler) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) (*pb.Order, error) {
 	log.Printf("New order received %v", p)
 
-	o, err := h.service.CreateOrder(ctx, p)
+	items, err := h.service.ValidateOrder(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
+	o, err := h.service.CreateOrder(ctx, p, items)
 	if err != nil {
 		return nil, err
 	}
@@ -53,4 +58,16 @@ func (h gRpcHandler) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) 
 	})
 
 	return o, nil
+}
+
+func (h gRpcHandler) GetOrder(ctx context.Context, p *pb.GetOrderRequest) (*pb.Order, error) {
+	log.Printf("New order requested %v", p)
+
+	o, err := h.service.GetOrder(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
+	return o, nil
+
 }

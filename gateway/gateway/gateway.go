@@ -8,4 +8,5 @@ import (
 
 type OrdersGateway interface {
 	CreateOrder(context.Context, *pb.CreateOrderRequest) (*pb.Order, error)
+	GetOrderById(ctx context.Context, customerId, orderId string) (*pb.Order, error)
 }
