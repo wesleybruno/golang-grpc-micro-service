@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/wesleybruno/golang-grpc-micro-service/common"
@@ -65,7 +66,12 @@ func (h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	common.WriteJSON(w, http.StatusOK, o)
+	res := &CreateOrderRequest{
+		Order:         o,
+		RedirectToURL: fmt.Sprintf("http://localhost:8080/success.html?customerID=%s&orderID=%s", o.CustomerID, o.ID),
+	}
+
+	common.WriteJSON(w, http.StatusOK, res)
 
 }
 

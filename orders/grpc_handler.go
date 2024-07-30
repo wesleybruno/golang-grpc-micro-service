@@ -71,3 +71,15 @@ func (h gRpcHandler) GetOrder(ctx context.Context, p *pb.GetOrderRequest) (*pb.O
 	return o, nil
 
 }
+
+func (h gRpcHandler) UpdateOrder(ctx context.Context, p *pb.Order) (*pb.Order, error) {
+	log.Printf("Order requested update %v", p)
+
+	_, err := h.service.UpdateOrder(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
+	return p, nil
+
+}

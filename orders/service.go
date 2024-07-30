@@ -57,6 +57,16 @@ func (s *orderService) ValidateOrder(ctx context.Context, p *pb.CreateOrderReque
 	return itemsWithPrice, nil
 }
 
+func (s *orderService) UpdateOrder(ctx context.Context, o *pb.Order) (*pb.Order, error) {
+
+	err := s.store.UpdateOrder(ctx, o.ID, o)
+	if err != nil {
+		return nil, err
+	}
+
+	return o, nil
+}
+
 func mergeItemsQuantities(items []*pb.ItemsWithQuantity) []*pb.ItemsWithQuantity {
 	merged := make([]*pb.ItemsWithQuantity, 0)
 

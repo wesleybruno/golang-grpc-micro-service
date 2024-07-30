@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/http"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -11,18 +12,21 @@ import (
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery/consul"
+	"github.com/wesleybruno/golang-grpc-micro-service/payment/gateway"
 	inmemProcessor "github.com/wesleybruno/golang-grpc-micro-service/payment/processor/inmem"
 	"google.golang.org/grpc"
 )
 
 var (
-	serviceName = "payment"
-	grpcAddress = common.EnvString("GRPC_ADDRESS", "localhost:2001")
-	consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
-	amqpUser    = common.EnvString("RABBITMQ_USER", "guest")
-	amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
-	amqpHost    = common.EnvString("RABBITMQ_HOST", "localhost")
-	amqpPort    = common.EnvString("RABBITMQ_PORT", "5672")
+	serviceName          = "payment"
+	grpcAddress          = common.EnvString("GRPC_ADDRESS", "localhost:2001")
+	consulAddr           = common.EnvString("CONSUL_ADDR", "localhost:8500")
+	amqpUser             = common.EnvString("RABBITMQ_USER", "guest")
+	amqpPass             = common.EnvString("RABBITMQ_PASS", "guest")
+	amqpHost             = common.EnvString("RABBITMQ_HOST", "localhost")
+	amqpPort             = common.EnvString("RABBITMQ_PORT", "5672")
+	httpAddr             = common.EnvString("HTTP_ADDR", "localhost:8081")
+	endpointStripeSecret = common.EnvString("ENDPOINT_STRIPE_SECRET", "")
 )
 
 func main() {
@@ -58,10 +62,23 @@ func main() {
 	}()
 
 	immenProcessor := inmemProcessor.NewInmem()
-	svc := NewService(immenProcessor)
+	gateway := gateway.NewGRPCGateway(registry)
+	svc := NewService(immenProcessor, gateway)
 
 	amqpConsumer := NewConsumer(svc)
 	go amqpConsumer.Listen(ch)
+
+	// Http Server
+	mux := http.NewServeMux()
+	handler := NewPaymentHttpHandler(ch)
+	handler.registerRoutes(mux)
+
+	go func() {
+		log.Println("Starting http server at:", httpAddr)
+		if err := http.ListenAndServe(httpAddr, mux); err != nil {
+			log.Fatal("Error to start http server", err.Error())
+		}
+	}()
 
 	// GRPC Server
 	grpcServer := grpc.NewServer()
