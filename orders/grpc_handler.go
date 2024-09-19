@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 )
 
@@ -31,12 +33,21 @@ func NewGrRpcHandler(grpcServer *grpc.Server, service OrdersService, ch *amqp.Ch
 func (h gRpcHandler) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) (*pb.Order, error) {
 	log.Printf("New order received %v", p)
 
-	items, err := h.service.ValidateOrder(ctx, p)
+	q, err := h.ch.QueueDeclare(broker.OrderCreatedEvent, true, false, false, false, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tr := otel.Tracer("amqp")
+	amqpContext, messageSpan := tr.Start(ctx, fmt.Sprintf("AMQP - publish - %s", q.Name))
+	defer messageSpan.End()
+
+	items, err := h.service.ValidateOrder(amqpContext, p)
 	if err != nil {
 		return nil, err
 	}
 
-	o, err := h.service.CreateOrder(ctx, p, items)
+	o, err := h.service.CreateOrder(amqpContext, p, items)
 	if err != nil {
 		return nil, err
 	}
@@ -46,15 +57,13 @@ func (h gRpcHandler) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest) 
 		return nil, err
 	}
 
-	q, err := h.ch.QueueDeclare(broker.OrderCreatedEvent, true, false, false, false, nil)
-	if err != nil {
-		return nil, err
-	}
+	headers := broker.InjectAMQPHeaders(amqpContext)
 
-	h.ch.PublishWithContext(ctx, "", q.Name, false, false, amqp.Publishing{
+	h.ch.PublishWithContext(amqpContext, "", q.Name, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		Body:         marshelledOrder,
 		DeliveryMode: amqp.Persistent,
+		Headers:      headers,
 	})
 
 	return o, nil

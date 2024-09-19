@@ -27,9 +27,14 @@ var (
 	amqpPort             = common.EnvString("RABBITMQ_PORT", "5672")
 	httpAddr             = common.EnvString("HTTP_ADDR", "localhost:8081")
 	endpointStripeSecret = common.EnvString("ENDPOINT_STRIPE_SECRET", "")
+	jaegerAddr           = common.EnvString("JAEGER_ADDR", "localhost:4318")
 )
 
 func main() {
+
+	if err := common.SetGlobalTracer(context.TODO(), serviceName, jaegerAddr); err != nil {
+		log.Fatal("could set global tracer")
+	}
 
 	// Service Discovery
 	registry, err := consul.NewRegistry(consulAddr, serviceName)
@@ -64,8 +69,9 @@ func main() {
 	immenProcessor := inmemProcessor.NewInmem()
 	gateway := gateway.NewGRPCGateway(registry)
 	svc := NewService(immenProcessor, gateway)
+	telemetryService := NewTelemetryMiddleware(svc)
 
-	amqpConsumer := NewConsumer(svc)
+	amqpConsumer := NewConsumer(telemetryService)
 	go amqpConsumer.Listen(ch)
 
 	// Http Server

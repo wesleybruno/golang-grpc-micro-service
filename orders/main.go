@@ -23,9 +23,14 @@ var (
 	amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
 	amqpHost    = common.EnvString("RABBITMQ_HOST", "localhost")
 	amqpPort    = common.EnvString("RABBITMQ_PORT", "5672")
+	jaegerAddr  = common.EnvString("JAEGER_ADDR", "localhost:4318")
 )
 
 func main() {
+
+	if err := common.SetGlobalTracer(context.TODO(), serviceName, jaegerAddr); err != nil {
+		log.Fatal("could set global tracer")
+	}
 
 	registry, err := consul.NewRegistry(consulAddr, serviceName)
 	if err != nil {
@@ -64,8 +69,9 @@ func main() {
 
 	store := NewOrderStore()
 	svc := NewOrderService(store)
+	telemetryService := NewTelemetryMiddleware(svc)
 
-	NewGrRpcHandler(grpcServer, svc, ch)
+	NewGrRpcHandler(grpcServer, telemetryService, ch)
 
 	consumer := NewConsumer(svc)
 	go consumer.Listen(ch)

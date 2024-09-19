@@ -15,6 +15,7 @@ import (
 	"github.com/stripe/stripe-go/v78/webhook"
 	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
+	"go.opentelemetry.io/otel"
 )
 
 type paymentHttpHandler struct {
@@ -64,6 +65,9 @@ func (h *paymentHttpHandler) handleCheckoutWebhook(w http.ResponseWriter, r *htt
 			orderID := session.Metadata["orderID"]
 			customerID := session.Metadata["customerID"]
 
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
 			o := &pb.Order{
 				ID:          orderID,
 				CustomerID:  customerID,
@@ -78,13 +82,17 @@ func (h *paymentHttpHandler) handleCheckoutWebhook(w http.ResponseWriter, r *htt
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+			tr := otel.Tracer("amqp")
+			amqpContext, messageSpan := tr.Start(ctx, fmt.Sprintf("AMQP - publish - %s", broker.OrderPaidEvent))
+			defer messageSpan.End()
 
-			h.channel.PublishWithContext(ctx, broker.OrderPaidEvent, "", false, false, amqp.Publishing{
+			headers := broker.InjectAMQPHeaders(amqpContext)
+
+			h.channel.PublishWithContext(amqpContext, broker.OrderPaidEvent, "", false, false, amqp.Publishing{
 				ContentType:  "application/json",
 				Body:         marshelledOrder,
 				DeliveryMode: amqp.Persistent,
+				Headers:      headers,
 			})
 
 			log.Println("Message published order.paid")

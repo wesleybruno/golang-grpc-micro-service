@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
+	"go.opentelemetry.io/otel"
 )
 
 type consumer struct {
@@ -43,6 +45,9 @@ func (c consumer) Listen(ch *amqp.Channel) {
 			}
 
 			log.Printf("Message received: %v", o)
+			ctx := broker.ExtractAMQPHeader(context.Background(), d.Headers)
+			tr := otel.Tracer("amqp")
+			_, messageSpan := tr.Start(ctx, fmt.Sprintf("AMQP - consume - %s", q.Name))
 
 			paymentLink, err := c.service.CreatePayment(context.Background(), o)
 			if err != nil {
@@ -56,6 +61,9 @@ func (c consumer) Listen(ch *amqp.Channel) {
 
 				continue
 			}
+
+			messageSpan.AddEvent(fmt.Sprintf("payment.created: %s", paymentLink))
+			messageSpan.End()
 
 			log.Printf("PaymentLink Created: %s", paymentLink)
 			d.Ack(false)

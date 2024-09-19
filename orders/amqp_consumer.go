@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
+	"go.opentelemetry.io/otel"
 )
 
 type consumer struct {
@@ -41,6 +43,10 @@ func (c *consumer) Listen(ch *amqp.Channel) {
 		for d := range msgs {
 			log.Printf("Received message: %s", d.Body)
 
+			ctx := broker.ExtractAMQPHeader(context.Background(), d.Headers)
+			tr := otel.Tracer("amqp")
+			_, messageSpan := tr.Start(ctx, fmt.Sprintf("AMQP - consume - %s", q.Name))
+
 			o := &pb.Order{}
 			if err := json.Unmarshal(d.Body, o); err != nil {
 				d.Nack(false, false)
@@ -60,7 +66,8 @@ func (c *consumer) Listen(ch *amqp.Channel) {
 
 				continue
 			}
-
+			messageSpan.AddEvent("order.updated")
+			messageSpan.End()
 			log.Println("Order has been updated from AMQP")
 			d.Ack(false)
 		}
