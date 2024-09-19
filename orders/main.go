@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery/consul"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -28,8 +28,13 @@ var (
 
 func main() {
 
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+
+	zap.ReplaceGlobals(logger)
+
 	if err := common.SetGlobalTracer(context.TODO(), serviceName, jaegerAddr); err != nil {
-		log.Fatal("could set global tracer")
+		logger.Fatal("could set global tracer", zap.Error(err))
 	}
 
 	registry, err := consul.NewRegistry(consulAddr, serviceName)
@@ -46,7 +51,7 @@ func main() {
 	go func() {
 		for {
 			if err := registry.HealthCheck(instanceId, serviceName); err != nil {
-				log.Fatalf("Error to verify HealthCheck %s", err)
+				logger.Error("Failed to health check", zap.Error(err))
 			}
 			time.Sleep(time.Second * 1)
 		}
@@ -63,7 +68,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	l, err := net.Listen("tcp", grpcAddress)
 	if err != nil {
-		log.Fatal("Error to start grpc server", err.Error())
+		logger.Fatal("failed to listen", zap.Error(err))
 	}
 	defer l.Close()
 
@@ -76,9 +81,9 @@ func main() {
 	consumer := NewConsumer(svc)
 	go consumer.Listen(ch)
 
-	log.Println("New GRPC Server start at:", grpcAddress)
+	logger.Info("Starting HTTP server", zap.String("port", grpcAddress))
 
 	if err := grpcServer.Serve(l); err != nil {
-		log.Fatal("Error to start grpc server", err.Error())
+		logger.Fatal("failed to serve", zap.Error(err))
 	}
 }
