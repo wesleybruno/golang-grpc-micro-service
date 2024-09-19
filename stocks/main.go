@@ -5,20 +5,19 @@ import (
 	"net"
 	"time"
 
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/wesleybruno/golang-grpc-micro-service/common"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/broker"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery"
 	"github.com/wesleybruno/golang-grpc-micro-service/common/discovery/consul"
-	"github.com/wesleybruno/golang-grpc-micro-service/orders/gateway"
+
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-
-	_ "github.com/joho/godotenv/autoload"
 )
 
 var (
-	serviceName = "orders"
-	grpcAddress = common.EnvString("GRPC_ADDRESS", "localhost:2000")
+	serviceName = "stock"
+	grpcAddr    = common.EnvString("GRPC_ADDR", "localhost:2002")
 	consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
 	amqpUser    = common.EnvString("RABBITMQ_USER", "guest")
 	amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
@@ -28,7 +27,6 @@ var (
 )
 
 func main() {
-
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
@@ -44,21 +42,21 @@ func main() {
 	}
 
 	ctx := context.Background()
-	instanceId := discovery.GenerateInstanceID(serviceName)
-	if err := registry.Register(ctx, instanceId, serviceName, grpcAddress); err != nil {
+	instanceID := discovery.GenerateInstanceID(serviceName)
+	if err := registry.Register(ctx, instanceID, serviceName, grpcAddr); err != nil {
 		panic(err)
 	}
 
 	go func() {
 		for {
-			if err := registry.HealthCheck(instanceId, serviceName); err != nil {
+			if err := registry.HealthCheck(instanceID, serviceName); err != nil {
 				logger.Error("Failed to health check", zap.Error(err))
 			}
 			time.Sleep(time.Second * 1)
 		}
 	}()
 
-	defer registry.Deregister(ctx, instanceId, serviceName)
+	defer registry.Deregister(ctx, instanceID, serviceName)
 
 	ch, close := broker.Connect(amqpUser, amqpPass, amqpHost, amqpPort)
 	defer func() {
@@ -67,24 +65,23 @@ func main() {
 	}()
 
 	grpcServer := grpc.NewServer()
-	l, err := net.Listen("tcp", grpcAddress)
+
+	l, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		logger.Fatal("failed to listen", zap.Error(err))
 	}
 	defer l.Close()
 
-	gateway := gateway.NewGateway(registry)
+	store := NewStore()
+	svc := NewService(store)
+	svcWithTelemetry := NewTelemetryMiddleware(svc)
 
-	store := NewOrderStore()
-	svc := NewOrderService(store, gateway)
-	telemetryService := NewTelemetryMiddleware(svc)
+	NewGRPCHandler(grpcServer, ch, svcWithTelemetry)
 
-	NewGrRpcHandler(grpcServer, telemetryService, ch)
-
-	consumer := NewConsumer(svc)
+	consumer := NewConsumer()
 	go consumer.Listen(ch)
 
-	logger.Info("Starting HTTP server", zap.String("port", grpcAddress))
+	logger.Info("Starting gRPC server", zap.String("port", grpcAddr))
 
 	if err := grpcServer.Serve(l); err != nil {
 		logger.Fatal("failed to serve", zap.Error(err))
