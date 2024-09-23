@@ -8,41 +8,62 @@ import (
 	"github.com/wesleybruno/golang-grpc-micro-service/orders/gateway"
 )
 
-type orderService struct {
+type service struct {
 	store   OrdersStore
 	gateway gateway.StockGateway
 }
 
-func NewOrderService(store OrdersStore, gateway gateway.StockGateway) *orderService {
-	return &orderService{store, gateway}
+func NewService(store OrdersStore, gateway gateway.StockGateway) *service {
+	return &service{store, gateway}
 }
 
-func (s *orderService) GetOrder(ctx context.Context, p *pb.GetOrderRequest) (*pb.Order, error) {
-	o, err := s.store.GetOrder(ctx, p.OrderID, p.CustomerID)
-	if err != nil {
-		return nil, err
-	}
-	return o, nil
-}
-
-func (s *orderService) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest, i []*pb.Item) (*pb.Order, error) {
-
-	o, err := s.store.Create(ctx, p, i)
+func (s *service) GetOrder(ctx context.Context, p *pb.GetOrderRequest) (*pb.Order, error) {
+	o, err := s.store.Get(ctx, p.OrderID, p.CustomerID)
 	if err != nil {
 		return nil, err
 	}
 
+	return o.ToProto(), nil
+}
+
+func (s *service) UpdateOrder(ctx context.Context, o *pb.Order) (*pb.Order, error) {
+	err := s.store.Update(ctx, o.ID, o)
+	if err != nil {
+		return nil, err
+	}
+
 	return o, nil
 }
 
-func (s *orderService) ValidateOrder(ctx context.Context, p *pb.CreateOrderRequest) ([]*pb.Item, error) {
+func (s *service) CreateOrder(ctx context.Context, p *pb.CreateOrderRequest, items []*pb.Item) (*pb.Order, error) {
+	id, err := s.store.Create(ctx, Order{
+		CustomerID:  p.CustomerID,
+		Status:      "pending",
+		Items:       items,
+		PaymentLink: "",
+	})
+	if err != nil {
+		return nil, err
+	}
 
+	o := &pb.Order{
+		ID:         id.Hex(),
+		CustomerID: p.CustomerID,
+		Status:     "pending",
+		Items:      items,
+	}
+
+	return o, nil
+}
+
+func (s *service) ValidateOrder(ctx context.Context, p *pb.CreateOrderRequest) ([]*pb.Item, error) {
 	if len(p.Items) == 0 {
 		return nil, common.ErrNoItems
 	}
 
 	mergedItems := mergeItemsQuantities(p.Items)
 
+	// validate with the stock service
 	inStock, items, err := s.gateway.CheckIfItemIsInStock(ctx, p.CustomerID, mergedItems)
 	if err != nil {
 		return nil, err
@@ -52,16 +73,6 @@ func (s *orderService) ValidateOrder(ctx context.Context, p *pb.CreateOrderReque
 	}
 
 	return items, nil
-}
-
-func (s *orderService) UpdateOrder(ctx context.Context, o *pb.Order) (*pb.Order, error) {
-
-	err := s.store.UpdateOrder(ctx, o.ID, o)
-	if err != nil {
-		return nil, err
-	}
-
-	return o, nil
 }
 
 func mergeItemsQuantities(items []*pb.ItemsWithQuantity) []*pb.ItemsWithQuantity {

@@ -2,62 +2,60 @@ package main
 
 import (
 	"context"
-	"errors"
 
 	pb "github.com/wesleybruno/golang-grpc-micro-service/common/api"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var orders = make([]*pb.Order, 0)
+const (
+	DbName   = "orders"
+	CollName = "orders"
+)
 
-type orderStore struct {
+type store struct {
+	db *mongo.Client
 }
 
-func NewOrderStore() *orderStore {
-	return &orderStore{}
+func NewStore(db *mongo.Client) *store {
+	return &store{db}
 }
 
-func (s *orderStore) Create(ctx context.Context, o *pb.CreateOrderRequest, i []*pb.Item) (*pb.Order, error) {
+func (s *store) Create(ctx context.Context, o Order) (primitive.ObjectID, error) {
+	col := s.db.Database(DbName).Collection(CollName)
 
-	order := &pb.Order{
-		ID:          "123",
-		CustomerID:  o.CustomerID,
-		Status:      "pending",
-		PaymentLink: "",
-		Items:       i,
-	}
+	newOrder, err := col.InsertOne(ctx, o)
 
-	orders = append(orders, order)
-
-	return order, nil
+	id := newOrder.InsertedID.(primitive.ObjectID)
+	return id, err
 }
 
-func (s *orderStore) GetOrder(ctx context.Context, orderId, customerId string) (*pb.Order, error) {
+func (s *store) Get(ctx context.Context, id, customerID string) (*Order, error) {
+	col := s.db.Database(DbName).Collection(CollName)
 
-	for _, o := range orders {
+	oID, _ := primitive.ObjectIDFromHex(id)
 
-		if o.ID == orderId && o.CustomerID == customerId {
-			return o, nil
-		}
+	var o Order
+	err := col.FindOne(ctx, bson.M{
+		"_id":        oID,
+		"customerID": customerID,
+	}).Decode(&o)
 
-	}
-
-	return nil, errors.New("order not found")
+	return &o, err
 }
 
-func (s *orderStore) UpdateOrder(ctx context.Context, orderId string, newOrder *pb.Order) error {
+func (s *store) Update(ctx context.Context, id string, newOrder *pb.Order) error {
+	col := s.db.Database(DbName).Collection(CollName)
 
-	for i, order := range orders {
+	oID, _ := primitive.ObjectIDFromHex(id)
 
-		if order.ID == orderId {
-			orders[i].Status = order.Status
-			orders[i].PaymentLink = order.PaymentLink
+	_, err := col.UpdateOne(ctx,
+		bson.M{"_id": oID},
+		bson.M{"$set": bson.M{
+			"paymentLink": newOrder.PaymentLink,
+			"status":      newOrder.Status,
+		}})
 
-			return nil
-
-		}
-
-	}
-
-	return nil
-
+	return err
 }
